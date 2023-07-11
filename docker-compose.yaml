@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:14.1-alpine
+    restart: always
+    environment:
+      - POSTGRES_USER=${DATABASE_USERNAME}
+      - POSTGRES_PASSWORD=${DATABASE_PASSWORD}
+      - POSTGRES_DB=${DATABASE_NAME}
+    ports:
+      - '5432:5432'
+    volumes:
+      - db:/var/lib/postgresql/data
+ 
+  api:
+    container_name: backend
+    build:
+      context: ./
+      dockerfile: ./Dockerfile.local
+      target: development
+    command: sh -c "npm run migrate:up && npm run start:dev"
+    image: backend
+    depends_on:
+      - db
+    ports:
+      - '3000:3000'
+    env_file:
+      - ./.env      
+    environment:
+      PORT: 3000
+      NODE_ENV: development
+      DATABASE_HOST: db
+    links:
+      - db
+    volumes:
+      - './:/app'
+  localstack:
+    image: localstack/localstack:latest
+    environment:
+      - AWS_DEFAULT_REGION=us-east-1
+      - EDGE_PORT=4566
+      - SERVICES=sqs
+    ports:
+      - '4566:4566'
+    volumes:
+      - "${TMPDIR:-/tmp/localstack}:/tmp/localstack"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+  localstack-seed:
+    image: amazon/aws-cli
+    depends_on: 
+      - localstack
+    entrypoint: /bin/sh -c "sed -i -e 's/\\r$$//' /localstack/seed.sh && sh /localstack/seed.sh"
+    volumes:
+      - "./localstack:/localstack"
+volumes:
+  db:
+    driver: local
